@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Module, QuizResult } from '../types';
+import { Module, Flashcard, QuizResult } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -40,26 +40,43 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
   const questions = useMemo(() => {
     const shuffledCards = shuffle(module.cards).slice(0, numQuestions);
     return shuffledCards.map((card) => {
-      // Pick 3 random wrong answers
-      const wrongCards = shuffle(module.cards.filter((c) => c.id !== card.id)).slice(0, 3);
-      const options = shuffle([card, ...wrongCards]);
-      return {
-        question: card,
-        options,
-      };
+      if (card.type === 'mcq' && card.options && card.options.length >= 2) {
+        // It's a real MCQ
+        return {
+          question: card,
+          isRealMCQ: true,
+          options: card.options.map((opt, i) => ({
+            id: `opt-${i}`,
+            text: opt,
+            isCorrect: i === card.correctOptionIndex
+          }))
+        };
+      } else {
+        // It's a standard flashcard, generate fake MCQ options
+        const wrongCards = shuffle(module.cards.filter((c) => c.id !== card.id)).slice(0, 3);
+        const options = shuffle([card, ...wrongCards]).map(c => ({
+          id: c.id,
+          text: c.definition,
+          isCorrect: c.id === card.id
+        }));
+        return {
+          question: card,
+          isRealMCQ: false,
+          options,
+        };
+      }
     });
   }, [module, numQuestions]);
 
   const currentQuestion = questions[currentIndex];
 
-  const handleAnswer = (optionId: string) => {
+  const handleAnswer = (optionId: string, isCorrectOption: boolean) => {
     if (selectedAnswer !== null) return; // Prevent multiple clicks
 
     setSelectedAnswer(optionId);
-    const correct = optionId === currentQuestion.question.id;
-    setIsCorrect(correct);
+    setIsCorrect(isCorrectOption);
 
-    if (correct) {
+    if (isCorrectOption) {
       setScore((s) => s + 1);
     }
 
@@ -74,7 +91,7 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
         const timeTaken = Math.floor((Date.now() - startTime) / 1000);
         onFinish({
           date: new Date().toISOString(),
-          score: score + (correct ? 1 : 0),
+          score: score + (isCorrectOption ? 1 : 0),
           totalQuestions: numQuestions,
           timeTakenSeconds: timeTaken,
         });
@@ -132,7 +149,7 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {currentQuestion.options.map((option, index) => {
                 const isSelected = selectedAnswer === option.id;
-                const isActuallyCorrect = option.id === currentQuestion.question.id;
+                const isActuallyCorrect = option.isCorrect;
                 
                 let buttonClass = "bg-[var(--panel-bg)] border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]";
                 
@@ -149,12 +166,12 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
                 return (
                   <button
                     key={option.id}
-                    onClick={() => handleAnswer(option.id)}
+                    onClick={() => handleAnswer(option.id, isActuallyCorrect)}
                     disabled={selectedAnswer !== null}
                     className={`p-6 rounded-2xl border-2 text-left transition-all font-sans text-lg flex items-start gap-4 ${buttonClass}`}
                   >
                     <span className="font-mono text-sm opacity-50 mt-1">{String.fromCharCode(65 + index)}.</span>
-                    <span className="flex-1">{option.definition}</span>
+                    <span className="flex-1">{option.text}</span>
                     {selectedAnswer !== null && isActuallyCorrect && (
                       <CheckCircle className="text-green-500 shrink-0" />
                     )}
@@ -170,4 +187,4 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
       </div>
     </div>
   );
-                }
+}
