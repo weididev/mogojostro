@@ -9,6 +9,8 @@
     "recharts": "^3.8.0",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.5.0",
+    "tesseract.js": "^5.0.5",
+    "pdfjs-dist": "^3.11.174",
     "@capacitor/core": "^6.0.0",
     "@capacitor/android": "^6.0.0"
   },
