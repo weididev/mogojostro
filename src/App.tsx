@@ -7,6 +7,9 @@ import { QuizSetup } from './components/QuizSetup';
 import { QuizRunner } from './components/QuizRunner';
 import { QuizResults } from './components/QuizResults';
 import { Sun, Moon } from 'lucide-react';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
 
 type ViewState = 'dashboard' | 'editor' | 'setup' | 'quiz' | 'results';
 
@@ -114,30 +117,56 @@ export default function App() {
 
   const handleExport = async () => {
     const dataStr = JSON.stringify(modules, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const file = new File([blob], 'mogojostro_backup.json', { type: 'application/json' });
+    const fileName = `mogojostro_backup_${Date.now()}.json`;
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (Capacitor.isNativePlatform()) {
       try {
-        await navigator.share({
-          files: [file],
-          title: 'Mogojostro Backup',
-          text: 'Backup of my Mogojostro modules',
+        // Write file to cache directory
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: dataStr,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
         });
-        return;
-      } catch (error) {
-        console.error('Share failed:', error);
-      }
-    }
 
-    const url = URL.createObjectURL(blob);
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", url);
-    downloadAnchorNode.setAttribute("download", "mogojostro_backup.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    URL.revokeObjectURL(url);
+        // Share the file
+        await Share.share({
+          title: 'Mogojostro Backup',
+          text: 'Here is my Mogojostro backup file.',
+          url: result.uri,
+          dialogTitle: 'Save or Share Backup',
+        });
+      } catch (error) {
+        console.error('Native share failed:', error);
+        alert('Failed to export file. Please try again.');
+      }
+    } else {
+      // Fallback for web
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const file = new File([blob], fileName, { type: 'application/json' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Mogojostro Backup',
+            text: 'Backup of my Mogojostro modules',
+          });
+          return;
+        } catch (error) {
+          console.error('Web share failed:', error);
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", url);
+      downloadAnchorNode.setAttribute("download", fileName);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -200,4 +229,4 @@ export default function App() {
       )}
     </div>
   );
-}
+        }
