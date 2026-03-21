@@ -1,15 +1,7 @@
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  // আপনার গিটহাব রিপোজিটরির নাম যদি "mogojostro" হয়, তাহলে নিচের লাইনটি দিন:
-  base: '/আপনার-রিপোজিটরির-নাম/', 
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-    },
-  },
-});
+  plugins: [react()],
+  base: './', // এটি অবশ্যই থাকতে হবে যাতে সাদা স্ক্রিন না আসে
+})
