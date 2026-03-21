@@ -23,7 +23,6 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      # Capacitor v6 এর জন্য Java 21 বাধ্যতামূলক
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -36,6 +35,11 @@ jobs:
           npx cap init "Mogojostro" "com.weididev.mogojostro" --web-dir dist
           npx cap add android
           npx cap sync android
+
+      # এই নতুন স্টেপটি Kotlin এর ডুপ্লিকেট ক্লাসের এরর ফিক্স করবে
+      - name: Fix Kotlin Duplicate Classes Error
+        run: |
+          echo "dependencies { constraints { implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'); implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22') } }" >> android/app/build.gradle
 
       - name: Build APK
         run: |
