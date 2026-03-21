@@ -23,14 +23,13 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      # অ্যান্ড্রয়েড অ্যাপ বানানোর জন্য Java সেটআপ করা হচ্ছে
+      # Capacitor v6 এর জন্য Java 21 বাধ্যতামূলক
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
-      # ওয়েবসাইটকে অ্যাপে রূপান্তর করার টুল (Capacitor) ইনস্টল করা হচ্ছে
       - name: Convert to Android App
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
@@ -38,14 +37,12 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      # APK ফাইল তৈরি করা হচ্ছে
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      # ডাউনলোডের জন্য APK ফাইলটি আপলোড করা হচ্ছে
       - name: Upload APK for Download
         uses: actions/upload-artifact@v4
         with:
