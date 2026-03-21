@@ -1,56 +1,53 @@
-name: Deploy to GitHub Pages
+name: Build Android APK
 
 on:
   push:
-    branches: ["main"] # আপনার ব্রাঞ্চের নাম যদি master হয়, তবে এখানে master লিখবেন
+    branches: ["main"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
-
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
-        
-      - name: Setup Node
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          
-      - name: Install dependencies
+
+      - name: Install Dependencies
         run: npm install --no-package-lock
-        
-      - name: Build
+
+      - name: Build Web App
         run: npm run build
-        
-      # এই নতুন অংশটি আপনার বিল্ড করা ফাইল ডাউনলোডের জন্য জিপ (ZIP) তৈরি করবে
-      - name: Upload Build Files for Download
+
+      # অ্যান্ড্রয়েড অ্যাপ বানানোর জন্য Java সেটআপ করা হচ্ছে
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # ওয়েবসাইটকে অ্যাপে রূপান্তর করার টুল (Capacitor) ইনস্টল করা হচ্ছে
+      - name: Convert to Android App
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "Mogojostro" "com.weididev.mogojostro" --web-dir dist
+          npx cap add android
+          npx cap sync android
+
+      # APK ফাইল তৈরি করা হচ্ছে
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      # ডাউনলোডের জন্য APK ফাইলটি আপলোড করা হচ্ছে
+      - name: Upload APK for Download
         uses: actions/upload-artifact@v4
         with:
-          name: mogojostro-web-build
-          path: ./dist
-          
-      - name: Upload artifact for GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: Mogojostro-Android-App
+          path: android/app/build/outputs/apk/debug/app-debug.apk
