@@ -36,7 +36,6 @@ export default function App() {
     results: activeModules.length === 1 ? activeModules[0].results : [],
   } : null;
 
-  // Handlers
   const handleCreateModule = () => {
     const newModule: Module = {
       id: Date.now().toString(),
@@ -82,7 +81,6 @@ export default function App() {
     };
     setCurrentResult(newResult);
 
-    // Save result to module if it's a single module
     if (activeModuleIds.length === 1) {
       const id = activeModuleIds[0];
       setModules(
@@ -114,14 +112,32 @@ export default function App() {
     setModules(newModules);
   };
 
-  const handleExport = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(modules));
+  const handleExport = async () => {
+    const dataStr = JSON.stringify(modules, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const file = new File([blob], 'mogojostro_backup.json', { type: 'application/json' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'Mogojostro Backup',
+          text: 'Backup of my Mogojostro modules',
+        });
+        return;
+      } catch (error) {
+        console.error('Share failed:', error);
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
     const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("href", url);
     downloadAnchorNode.setAttribute("download", "mogojostro_backup.json");
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
