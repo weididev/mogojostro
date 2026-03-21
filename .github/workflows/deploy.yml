@@ -14,6 +14,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,11 +28,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          # cache: 'npm' লাইনটি এখান থেকে রিমুভ করে দেওয়া হয়েছে
+          node-version: 24
+          # এখানে কোনো cache: 'npm' লাইন থাকবে না। এটি মুছে দেওয়া হয়েছে।
           
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-package-lock # এই লাইনটি আপডেট করা হয়েছে
         
       - name: Build
         run: npm run build
