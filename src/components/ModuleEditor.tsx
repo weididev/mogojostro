@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Module, Flashcard } from '../types';
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, FileText, Loader2, Camera } from 'lucide-react';
 import { motion } from 'motion/react';
+import Tesseract from 'tesseract.js';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Setup PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface ModuleEditorProps {
   module: Module;
@@ -12,6 +17,9 @@ interface ModuleEditorProps {
 export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
   const [title, setTitle] = useState(module.title);
   const [cards, setCards] = useState<Flashcard[]>(module.cards);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddCard = () => {
     setCards([
@@ -31,13 +39,98 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
   };
 
   const handleSave = () => {
-    // Filter out empty cards
     const validCards = cards.filter(c => c.term.trim() !== '' && c.definition.trim() !== '');
     onSave({
       ...module,
       title: title.trim() || 'Untitled Module',
       cards: validCards,
     });
+  };
+
+  const processFile = async (file: File) => {
+    setIsProcessing(true);
+    try {
+      let extractedText = '';
+
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          extractedText += pageText + '\n\n';
+        }
+      } else if (file.type.startsWith('image/')) {
+        const result = await Tesseract.recognize(file, 'eng');
+        extractedText = result.data.text;
+      } else {
+        throw new Error('Unsupported file type');
+      }
+
+      const lines = extractedText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const extractedCards: {term: string, definition: string}[] = [];
+      
+      let currentTerm = '';
+      let currentDef = '';
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^(\d+[\.\)]|Q:|Question:)/i.test(line)) {
+          if (currentTerm) {
+            extractedCards.push({ term: currentTerm, definition: currentDef || '...' });
+          }
+          currentTerm = line;
+          currentDef = '';
+        } else if (/^(A:|Answer:|Ans:|[A-D][\.\)])/i.test(line)) {
+          currentDef += (currentDef ? '\n' : '') + line;
+        } else {
+          if (!currentTerm) {
+            currentTerm = line;
+          } else if (!currentDef) {
+            currentDef = line;
+          } else {
+            currentDef += '\n' + line;
+          }
+        }
+      }
+      if (currentTerm) {
+        extractedCards.push({ term: currentTerm, definition: currentDef || '...' });
+      }
+      
+      if (extractedCards.length <= 1 && lines.length > 1) {
+        extractedCards.length = 0; 
+        for(let i = 0; i < lines.length; i += 2) {
+          extractedCards.push({
+            term: lines[i],
+            definition: lines[i+1] || '...'
+          });
+        }
+      }
+
+      if (extractedCards.length > 0) {
+        const newCards = extractedCards.map((c, index) => ({
+          id: Date.now().toString() + index.toString(),
+          term: c.term || '',
+          definition: c.definition || '',
+        }));
+        setCards(prev => [...prev, ...newCards]);
+      } else {
+        alert('Could not extract any meaningful text from the document.');
+      }
+    } catch (error) {
+      console.error('Error processing document:', error);
+      alert('Failed to process document. Please try again.');
+    } finally {
+      setIsProcessing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) processFile(file);
   };
 
   return (
@@ -50,6 +143,37 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
           <ArrowLeft size={20} /> BACK TO MATRIX
         </button>
         <div className="flex items-center gap-4">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept="image/*,application/pdf"
+            className="hidden"
+          />
+          <input
+            type="file"
+            ref={cameraInputRef}
+            onChange={handleFileUpload}
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+          />
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={isProcessing}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--panel-bg)] border border-[var(--border-color)] text-[var(--text-main)] font-bold rounded-lg hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-all text-sm font-mono disabled:opacity-50"
+            title="Take Photo"
+          >
+            {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isProcessing}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--panel-bg)] border border-[var(--border-color)] text-[var(--text-main)] font-bold rounded-lg hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-all text-sm font-mono disabled:opacity-50"
+          >
+            {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+            {isProcessing ? 'SCANNING...' : 'AUTO-GENERATE'}
+          </button>
           <button
             onClick={handleSave}
             className="flex items-center gap-2 px-6 py-2 bg-[var(--neon-purple)] text-[var(--btn-text)] font-bold rounded-lg hover:opacity-80 transition-all glow-border-purple text-sm font-mono"
