@@ -24,7 +24,7 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
   const handleAddCard = () => {
     setCards([
       ...cards,
-      { id: Date.now().toString(), term: '', definition: '' },
+      { id: Date.now().toString(), term: '', definition: '', type: 'flashcard' },
     ]);
   };
 
@@ -32,18 +32,78 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
     setCards(cards.filter((c) => c.id !== id));
   };
 
-  const handleChange = (id: string, field: 'term' | 'definition', value: string) => {
+  const handleChange = (id: string, field: keyof Flashcard, value: any) => {
     setCards(
       cards.map((c) => (c.id === id ? { ...c, [field]: value } : c))
     );
   };
 
+  const handleOptionChange = (id: string, index: number, value: string) => {
+    setCards(
+      cards.map((c) => {
+        if (c.id === id) {
+          const newOptions = [...(c.options || ['', '', '', ''])];
+          newOptions[index] = value;
+          return { ...c, options: newOptions };
+        }
+        return c;
+      })
+    );
+  };
+
   const handleSave = () => {
-    const validCards = cards.filter(c => c.term.trim() !== '' && c.definition.trim() !== '');
+    // Filter out empty cards
+    const validCards = cards.filter(c => c.term.trim() !== '');
     onSave({
       ...module,
       title: title.trim() || 'Untitled Module',
       cards: validCards,
+    });
+  };
+
+  const preprocessImage = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(URL.createObjectURL(file));
+        
+        // Scale down if too large to speed up processing
+        const MAX_WIDTH = 1500;
+        let width = img.width;
+        let height = img.height;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Simple grayscale and contrast boost
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          // Grayscale
+          let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          // Contrast boost
+          gray = gray < 128 ? gray * 0.8 : gray * 1.2;
+          if (gray > 255) gray = 255;
+          
+          data[i] = gray;
+          data[i + 1] = gray;
+          data[i + 2] = gray;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
     });
   };
 
@@ -62,31 +122,50 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
           extractedText += pageText + '\n\n';
         }
       } else if (file.type.startsWith('image/')) {
-        const result = await Tesseract.recognize(file, 'eng');
+        const processedImageUrl = await preprocessImage(file);
+        const result = await Tesseract.recognize(processedImageUrl, 'eng');
         extractedText = result.data.text;
       } else {
         throw new Error('Unsupported file type');
       }
 
+      // Basic heuristic parser for Q&A, Terms/Definitions, or MCQs
       const lines = extractedText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      const extractedCards: {term: string, definition: string}[] = [];
+      const extractedCards: Flashcard[] = [];
       
       let currentTerm = '';
       let currentDef = '';
+      let currentOptions: string[] = [];
+      let isMCQ = false;
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        
         if (/^(\d+[\.\)]|Q:|Question:)/i.test(line)) {
           if (currentTerm) {
-            extractedCards.push({ term: currentTerm, definition: currentDef || '...' });
+            extractedCards.push({ 
+              id: Date.now().toString() + Math.random(),
+              term: currentTerm, 
+              definition: currentDef || '...',
+              type: isMCQ && currentOptions.length > 0 ? 'mcq' : 'flashcard',
+              options: isMCQ ? [...currentOptions, '', '', '', ''].slice(0, 4) : undefined,
+              correctOptionIndex: 0
+            });
           }
           currentTerm = line;
           currentDef = '';
-        } else if (/^(A:|Answer:|Ans:|[A-D][\.\)])/i.test(line)) {
+          currentOptions = [];
+          isMCQ = false;
+        } else if (/^([A-D][\.\)])/i.test(line)) {
+          isMCQ = true;
+          currentOptions.push(line.replace(/^([A-D][\.\)])\s*/i, ''));
+        } else if (/^(A:|Answer:|Ans:)/i.test(line)) {
           currentDef += (currentDef ? '\n' : '') + line;
         } else {
           if (!currentTerm) {
             currentTerm = line;
+          } else if (isMCQ && currentOptions.length > 0 && currentOptions.length < 4) {
+             currentOptions[currentOptions.length - 1] += ' ' + line;
           } else if (!currentDef) {
             currentDef = line;
           } else {
@@ -95,26 +174,30 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
         }
       }
       if (currentTerm) {
-        extractedCards.push({ term: currentTerm, definition: currentDef || '...' });
+        extractedCards.push({ 
+          id: Date.now().toString() + Math.random(),
+          term: currentTerm, 
+          definition: currentDef || '...',
+          type: isMCQ && currentOptions.length > 0 ? 'mcq' : 'flashcard',
+          options: isMCQ ? [...currentOptions, '', '', '', ''].slice(0, 4) : undefined,
+          correctOptionIndex: 0
+        });
       }
       
       if (extractedCards.length <= 1 && lines.length > 1) {
         extractedCards.length = 0; 
         for(let i = 0; i < lines.length; i += 2) {
           extractedCards.push({
+            id: Date.now().toString() + Math.random(),
             term: lines[i],
-            definition: lines[i+1] || '...'
+            definition: lines[i+1] || '...',
+            type: 'flashcard'
           });
         }
       }
 
       if (extractedCards.length > 0) {
-        const newCards = extractedCards.map((c, index) => ({
-          id: Date.now().toString() + index.toString(),
-          term: c.term || '',
-          definition: c.definition || '',
-        }));
-        setCards(prev => [...prev, ...newCards]);
+        setCards(prev => [...prev, ...extractedCards]);
       } else {
         alert('Could not extract any meaningful text from the document.');
       }
@@ -193,49 +276,94 @@ export function ModuleEditor({ module, onSave, onCancel }: ModuleEditorProps) {
         />
       </div>
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-12 gap-4 px-4 text-gray-500 font-mono text-sm uppercase tracking-wider">
-          <div className="col-span-1 text-center">#</div>
-          <div className="col-span-4">Term / Rule</div>
-          <div className="col-span-6">Definition / Description</div>
-          <div className="col-span-1 text-center">Act</div>
-        </div>
-
+      <div className="space-y-6">
         {cards.map((card, index) => (
           <motion.div
             key={card.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="grid grid-cols-12 gap-4 items-center bg-[var(--panel-bg)] border border-[var(--border-color)] p-4 rounded-xl hover:border-[var(--neon-cyan)] transition-colors"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-[var(--panel-bg)] border border-[var(--border-color)] p-6 rounded-xl hover:border-[var(--neon-cyan)] transition-colors relative group"
           >
-            <div className="col-span-1 text-center text-gray-600 font-mono font-bold">
-              {String(index + 1).padStart(2, '0')}
-            </div>
-            <div className="col-span-4">
-              <input
-                type="text"
-                value={card.term}
-                onChange={(e) => handleChange(card.id, 'term', e.target.value)}
-                placeholder="e.g., Rule 1"
-                className="w-full bg-transparent text-[var(--text-main)] border-b border-transparent focus:border-[var(--neon-cyan)] focus:outline-none py-2 font-mono"
-              />
-            </div>
-            <div className="col-span-6">
-              <input
-                type="text"
-                value={card.definition}
-                onChange={(e) => handleChange(card.id, 'definition', e.target.value)}
-                placeholder="e.g., Never forget rule one."
-                className="w-full bg-transparent text-[var(--text-main)] border-b border-transparent focus:border-[var(--neon-purple)] focus:outline-none py-2 font-sans"
-              />
-            </div>
-            <div className="col-span-1 flex justify-center">
+            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={() => handleRemoveCard(card.id)}
                 className="text-gray-500 hover:text-red-500 transition-colors p-2 rounded-md hover:bg-gray-800"
+                title="Delete Card"
               >
                 <Trash2 size={18} />
               </button>
+            </div>
+
+            <div className="flex items-center gap-4 mb-4">
+              <div className="text-gray-500 font-mono font-bold text-lg">
+                {String(index + 1).padStart(2, '0')}
+              </div>
+              <select
+                value={card.type || 'flashcard'}
+                onChange={(e) => handleChange(card.id, 'type', e.target.value)}
+                className="bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-main)] rounded-md px-3 py-1 text-sm font-mono focus:outline-none focus:border-[var(--neon-cyan)]"
+              >
+                <option value="flashcard">Standard (Term/Def)</option>
+                <option value="mcq">Multiple Choice (MCQ)</option>
+              </select>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 font-mono">Question / Term</label>
+                <textarea
+                  value={card.term}
+                  onChange={(e) => handleChange(card.id, 'term', e.target.value)}
+                  placeholder="Enter the question or term..."
+                  className="w-full bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--border-color)] rounded-lg focus:border-[var(--neon-cyan)] focus:outline-none p-3 font-sans min-h-[80px] resize-y"
+                />
+              </div>
+
+              {card.type === 'mcq' ? (
+                <div>
+                  <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 font-mono">Options (Select Correct Answer)</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[0, 1, 2, 3].map((optIndex) => (
+                      <div key={optIndex} className={`flex items-center gap-3 p-2 rounded-lg border ${card.correctOptionIndex === optIndex ? 'border-[var(--neon-cyan)] bg-[var(--neon-cyan)]/10' : 'border-[var(--border-color)] bg-[var(--bg-color)]'}`}>
+                        <input
+                          type="radio"
+                          name={`correct-${card.id}`}
+                          checked={card.correctOptionIndex === optIndex}
+                          onChange={() => handleChange(card.id, 'correctOptionIndex', optIndex)}
+                          className="w-4 h-4 text-[var(--neon-cyan)] focus:ring-[var(--neon-cyan)] bg-transparent border-gray-600"
+                        />
+                        <input
+                          type="text"
+                          value={card.options?.[optIndex] || ''}
+                          onChange={(e) => handleOptionChange(card.id, optIndex, e.target.value)}
+                          placeholder={`Option ${String.fromCharCode(65 + optIndex)}`}
+                          className="w-full bg-transparent text-[var(--text-main)] focus:outline-none font-sans text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 font-mono">Explanation (Optional)</label>
+                    <input
+                      type="text"
+                      value={card.definition}
+                      onChange={(e) => handleChange(card.id, 'definition', e.target.value)}
+                      placeholder="Explanation for the correct answer..."
+                      className="w-full bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--border-color)] rounded-lg focus:border-[var(--neon-purple)] focus:outline-none p-3 font-sans"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 font-mono">Answer / Definition</label>
+                  <textarea
+                    value={card.definition}
+                    onChange={(e) => handleChange(card.id, 'definition', e.target.value)}
+                    placeholder="Enter the answer or definition..."
+                    className="w-full bg-[var(--bg-color)] text-[var(--text-main)] border border-[var(--border-color)] rounded-lg focus:border-[var(--neon-purple)] focus:outline-none p-3 font-sans min-h-[80px] resize-y"
+                  />
+                </div>
+              )}
             </div>
           </motion.div>
         ))}
