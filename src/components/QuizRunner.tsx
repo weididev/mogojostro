@@ -43,7 +43,7 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
       if (card.type === 'mcq' && card.options && card.options.length >= 2) {
         // It's a real MCQ
         return {
-          question: card,
+          prompt: card.term,
           isRealMCQ: true,
           options: card.options.map((opt, i) => ({
             id: `opt-${i}`,
@@ -52,15 +52,19 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
           }))
         };
       } else {
-        // It's a standard flashcard, generate fake MCQ options
+        // It's a standard flashcard, randomly flip term/definition
+        const askDefinition = Math.random() > 0.5;
+        const prompt = askDefinition ? card.definition : card.term;
+
         const wrongCards = shuffle(module.cards.filter((c) => c.id !== card.id)).slice(0, 3);
         const options = shuffle([card, ...wrongCards]).map(c => ({
           id: c.id,
-          text: c.definition,
+          text: askDefinition ? c.term : c.definition,
           isCorrect: c.id === card.id
         }));
+        
         return {
-          question: card,
+          prompt,
           isRealMCQ: false,
           options,
         };
@@ -140,9 +144,11 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
           >
             <div className="bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-3xl p-8 md:p-12 mb-8 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[var(--neon-cyan)] to-[var(--neon-purple)]" />
-              <h2 className="text-gray-500 font-mono text-sm mb-4 uppercase tracking-widest">IDENTIFY DEFINITION FOR:</h2>
-              <p className="text-3xl md:text-5xl font-bold text-white font-sans leading-tight">
-                {currentQuestion.question.term}
+              <h2 className="text-gray-500 font-mono text-sm mb-4 uppercase tracking-widest">
+                {currentQuestion.isRealMCQ ? 'QUESTION:' : 'IDENTIFY MATCH FOR:'}
+              </h2>
+              <p className="text-3xl md:text-5xl font-bold text-white font-sans leading-tight whitespace-pre-wrap">
+                {currentQuestion.prompt}
               </p>
             </div>
 
@@ -171,7 +177,7 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
                     className={`p-6 rounded-2xl border-2 text-left transition-all font-sans text-lg flex items-start gap-4 ${buttonClass}`}
                   >
                     <span className="font-mono text-sm opacity-50 mt-1">{String.fromCharCode(65 + index)}.</span>
-                    <span className="flex-1">{option.text}</span>
+                    <span className="flex-1 whitespace-pre-wrap">{option.text}</span>
                     {selectedAnswer !== null && isActuallyCorrect && (
                       <CheckCircle className="text-green-500 shrink-0" />
                     )}
