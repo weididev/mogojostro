@@ -32,7 +32,14 @@ jobs:
       - name: Build
         run: npm run build
         
-      - name: Upload artifact
+      # এই নতুন অংশটি আপনার বিল্ড করা ফাইল ডাউনলোডের জন্য জিপ (ZIP) তৈরি করবে
+      - name: Upload Build Files for Download
+        uses: actions/upload-artifact@v4
+        with:
+          name: mogojostro-web-build
+          path: ./dist
+          
+      - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
