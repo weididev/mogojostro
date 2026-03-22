@@ -15,6 +15,7 @@ type ViewState = 'dashboard' | 'editor' | 'setup' | 'quiz' | 'results';
 
 export default function App() {
   const [modules, setModules] = useLocalStorage<Module[]>('mogojostro_modules', []);
+  const [combinedResults, setCombinedResults] = useLocalStorage<QuizResult[]>('mogojostro_combined_results', []);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [activeModuleIds, setActiveModuleIds] = useState<string[]>([]);
   const [quizNumQuestions, setQuizNumQuestions] = useState(0);
@@ -29,16 +30,18 @@ export default function App() {
     }
   }, [isDark]);
 
-  const activeModules = modules.filter((m) => activeModuleIds.includes(m.id));
-  const activeModule = activeModules.length === 1 ? activeModules[0] : null;
+  const isCombinedStats = activeModuleIds.length === 1 && activeModuleIds[0] === '__combined__';
+  const activeModules = isCombinedStats ? modules : modules.filter((m) => activeModuleIds.includes(m.id));
+  const activeModule = activeModules.length === 1 && !isCombinedStats ? activeModules[0] : null;
 
   const combinedModule: Module | null = activeModules.length > 0 ? {
-    id: activeModules.length === 1 ? activeModules[0].id : 'combined',
-    title: activeModules.length === 1 ? activeModules[0].title : 'Combined Quiz',
-    cards: activeModules.flatMap(m => m.cards),
-    results: activeModules.length === 1 ? activeModules[0].results : [],
+    id: isCombinedStats ? 'combined' : (activeModules.length === 1 ? activeModules[0].id : 'combined'),
+    title: isCombinedStats ? 'Combined Quizzes History' : (activeModules.length === 1 ? activeModules[0].title : 'Combined Quiz'),
+    cards: activeModules.flatMap(m => m.cards.map(c => ({ ...c, moduleId: m.id }))),
+    results: isCombinedStats ? combinedResults : (activeModules.length === 1 ? activeModules[0].results : combinedResults),
   } : null;
 
+  // Handlers
   const handleCreateModule = () => {
     const newModule: Module = {
       id: Date.now().toString(),
@@ -84,6 +87,7 @@ export default function App() {
     };
     setCurrentResult(newResult);
 
+    // Save result to module if it's a single module
     if (activeModuleIds.length === 1) {
       const id = activeModuleIds[0];
       setModules(
@@ -93,12 +97,20 @@ export default function App() {
             : m
         )
       );
+    } else {
+      setCombinedResults([...combinedResults, newResult]);
     }
     setCurrentView('results');
   };
 
   const handleViewStats = (id: string) => {
     setActiveModuleIds([id]);
+    setCurrentResult(undefined);
+    setCurrentView('results');
+  };
+
+  const handleViewCombinedStats = () => {
+    setActiveModuleIds(['__combined__']);
     setCurrentResult(undefined);
     setCurrentView('results');
   };
@@ -184,11 +196,13 @@ export default function App() {
       {currentView === 'dashboard' && (
         <Dashboard
           modules={modules}
+          combinedResultsCount={combinedResults.length}
           onCreateModule={handleCreateModule}
           onEditModule={handleEditModule}
           onDeleteModule={handleDeleteModule}
           onStartQuiz={handleStartQuizSetup}
           onViewStats={handleViewStats}
+          onViewCombinedStats={handleViewCombinedStats}
           onImport={handleImport}
           onExport={handleExport}
         />
@@ -229,4 +243,4 @@ export default function App() {
       )}
     </div>
   );
-        }
+}
