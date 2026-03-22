@@ -56,7 +56,16 @@ export function QuizRunner({ module, numQuestions, onFinish, onCancel }: QuizRun
         const askDefinition = Math.random() > 0.5;
         const prompt = askDefinition ? card.definition : card.term;
 
-        const wrongCards = shuffle(module.cards.filter((c) => c.id !== card.id)).slice(0, 3);
+        // Try to get wrong cards from the same module
+        let sameModuleCards = module.cards.filter((c) => c.id !== card.id && c.moduleId === card.moduleId);
+        
+        // If not enough cards in the same module, fallback to other modules
+        if (sameModuleCards.length < 3) {
+          const otherCards = module.cards.filter((c) => c.id !== card.id && c.moduleId !== card.moduleId);
+          sameModuleCards = [...sameModuleCards, ...otherCards];
+        }
+
+        const wrongCards = shuffle(sameModuleCards).slice(0, 3);
         const options = shuffle([card, ...wrongCards]).map(c => ({
           id: c.id,
           text: askDefinition ? c.term : c.definition,
