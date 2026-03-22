@@ -11,7 +11,36 @@ interface QuizSetupProps {
 
 export function QuizSetup({ module, onStart, onCancel }: QuizSetupProps) {
   const maxQuestions = module.cards.length;
-  const [numQuestions, setNumQuestions] = useState(Math.min(10, maxQuestions));
+  const [numQuestions, setNumQuestions] = useState<number | string>(Math.min(10, maxQuestions));
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val)) {
+      setNumQuestions('');
+    } else {
+      setNumQuestions(val);
+    }
+  };
+
+  const handleBlur = () => {
+    let finalVal = Number(numQuestions);
+    if (isNaN(finalVal) || finalVal < 4) {
+      finalVal = Math.min(4, maxQuestions);
+    } else if (finalVal > maxQuestions) {
+      finalVal = maxQuestions;
+    }
+    setNumQuestions(finalVal);
+  };
+
+  const handleStart = () => {
+    let finalVal = Number(numQuestions);
+    if (isNaN(finalVal) || finalVal < 4) {
+      finalVal = Math.min(4, maxQuestions);
+    } else if (finalVal > maxQuestions) {
+      finalVal = maxQuestions;
+    }
+    onStart(finalVal);
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6 flex flex-col items-center justify-center min-h-[80vh]">
@@ -40,26 +69,38 @@ export function QuizSetup({ module, onStart, onCancel }: QuizSetupProps) {
           </label>
           <div className="flex items-center justify-center gap-6">
             <button
-              onClick={() => setNumQuestions(Math.max(4, numQuestions - 1))}
-              className="w-12 h-12 rounded-full border border-[var(--border-color)] text-[var(--text-main)] flex items-center justify-center hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-colors text-2xl font-mono"
+              onClick={() => setNumQuestions(Math.max(4, (Number(numQuestions) || 0) - 10))}
+              className="w-14 h-14 rounded-full border border-[var(--border-color)] text-[var(--text-main)] flex items-center justify-center hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-colors text-xl font-mono"
             >
-              -
+              -10
             </button>
-            <span className="text-6xl font-bold text-white font-mono w-24 text-center glow-text-purple">
-              {numQuestions}
-            </span>
+            <input
+              type="number"
+              value={numQuestions}
+              onChange={handleInputChange}
+              onBlur={handleBlur}
+              className="text-6xl font-bold text-white font-mono w-32 text-center bg-transparent border-b-2 border-transparent focus:border-[var(--neon-cyan)] outline-none glow-text-purple transition-colors"
+              style={{ MozAppearance: 'textfield' }}
+            />
             <button
-              onClick={() => setNumQuestions(Math.min(maxQuestions, numQuestions + 1))}
-              className="w-12 h-12 rounded-full border border-[var(--border-color)] text-[var(--text-main)] flex items-center justify-center hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-colors text-2xl font-mono"
+              onClick={() => setNumQuestions(Math.min(maxQuestions, (Number(numQuestions) || 0) + 10))}
+              className="w-14 h-14 rounded-full border border-[var(--border-color)] text-[var(--text-main)] flex items-center justify-center hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-colors text-xl font-mono"
             >
-              +
+              +10
             </button>
           </div>
+          <style>{`
+            input[type=number]::-webkit-inner-spin-button, 
+            input[type=number]::-webkit-outer-spin-button { 
+              -webkit-appearance: none; 
+              margin: 0; 
+            }
+          `}</style>
           <p className="text-gray-500 mt-4 font-mono text-sm">MAX AVAILABLE: {maxQuestions}</p>
         </div>
 
         <button
-          onClick={() => onStart(numQuestions)}
+          onClick={handleStart}
           className="w-full py-4 bg-[var(--neon-cyan)] text-[var(--btn-text)] font-bold rounded-xl hover:opacity-80 transition-all glow-border-cyan text-lg font-mono flex items-center justify-center gap-3"
         >
           <Play size={24} fill="currentColor" /> ENGAGE
