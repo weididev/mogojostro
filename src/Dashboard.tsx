@@ -5,22 +5,26 @@ import { motion } from 'motion/react';
 
 interface DashboardProps {
   modules: Module[];
+  combinedResultsCount: number;
   onCreateModule: () => void;
   onEditModule: (id: string) => void;
   onDeleteModule: (id: string) => void;
   onStartQuiz: (ids: string[]) => void;
   onViewStats: (id: string) => void;
+  onViewCombinedStats: () => void;
   onImport: (modules: Module[]) => void;
   onExport: () => void;
 }
 
 export function Dashboard({
   modules,
+  combinedResultsCount,
   onCreateModule,
   onEditModule,
   onDeleteModule,
   onStartQuiz,
   onViewStats,
+  onViewCombinedStats,
   onImport,
   onExport,
 }: DashboardProps) {
@@ -56,6 +60,7 @@ export function Dashboard({
       try {
         const content = event.target?.result as string;
         const importedModules = JSON.parse(content);
+        // Basic validation
         if (Array.isArray(importedModules)) {
           onImport(importedModules);
         } else {
@@ -66,6 +71,7 @@ export function Dashboard({
       }
     };
     reader.readAsText(file);
+    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -89,6 +95,14 @@ export function Dashboard({
               <Play size={16} fill="currentColor" /> START COMBINED QUIZ ({selectedModules.size})
             </button>
           )}
+          {combinedResultsCount > 0 && (
+            <button
+              onClick={onViewCombinedStats}
+              className="flex items-center gap-2 px-4 py-2 bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-lg hover:border-[var(--neon-purple)] hover:text-[var(--neon-purple)] transition-all text-sm font-mono"
+            >
+              <BarChart2 size={16} /> COMBINED STATS
+            </button>
+          )}
           <button
             onClick={handleImportClick}
             className="flex items-center gap-2 px-4 py-2 bg-[var(--panel-bg)] border border-[var(--border-color)] rounded-lg hover:border-[var(--neon-purple)] hover:text-[var(--neon-purple)] transition-all text-sm font-mono"
@@ -99,7 +113,7 @@ export function Dashboard({
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".json"
+            accept=".json,application/json,text/plain,*/*"
             className="hidden"
           />
           <button
