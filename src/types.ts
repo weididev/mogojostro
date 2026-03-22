@@ -5,6 +5,7 @@ export type Flashcard = {
   type?: 'flashcard' | 'mcq';
   options?: string[];
   correctOptionIndex?: number;
+  moduleId?: string;
 };
 
 export type QuizResult = {
